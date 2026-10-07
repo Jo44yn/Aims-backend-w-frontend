@@ -8,13 +8,24 @@ export const role = () => {
   } catch { return 'gm' }
 }
 
+// Who can create/edit what (blueprint role matrix; Admin and the owner/GM can act on every business module).
+// The server enforces the same rules, so this only hides buttons people could not use anyway.
+const WRITE = {
+  catalog: ['admin', 'gm', 'purchasing'],
+  production: ['admin', 'gm', 'production'],
+  clients: ['admin', 'gm', 'bidding'],
+  users: ['admin'],
+  settings: ['admin', 'gm'],
+}
+export const can = (area) => (WRITE[area] || []).includes(role())
+
 // One colour per meaning on every screen (blueprint: status badges).
 const TONE = {}
 const add = (tone, list) => list.forEach((s) => (TONE[s] = tone))
-add('gray', ['draft', 'queued', 'cancelled', 'closed', 'inactive'])
+add('gray', ['draft', 'queued', 'cancelled', 'closed', 'inactive', 'unavailable'])
 add('amber', ['for approval', 'for qa', 'at risk', 'expiring', 'partially paid', 'pending', 'preparing', 'new'])
 add('teal', ['sent', 'awaiting supplier', 'in production', 'scheduled', 'in progress', 'submitted', 'partially received', 'quoted'])
-add('green', ['on track', 'ready', 'delivered', 'accepted', 'paid', 'approved', 'active', 'passed', 'done', 'received', 'won', 'posted'])
+add('green', ['on track', 'ready', 'delivered', 'accepted', 'paid', 'approved', 'active', 'passed', 'done', 'received', 'won', 'posted', 'available'])
 add('red', ['delayed', 'rejected', 'overdue', 'void', 'suspended', 'expired', 'lost', 'failed'])
 export const badge = (s) => `<span class="badge badge-${TONE[String(s).toLowerCase()] || 'gray'}">${s}</span>`
 
@@ -124,7 +135,7 @@ const field = (f) => {
     ctl = `<select class="input" ${common}><option value="">Select…</option>${opts.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(f.value ?? '') ? 'selected' : ''}>${o.label}</option>`).join('')}</select>`
   } else if (f.type === 'textarea') ctl = `<textarea class="input" rows="3" ${common}>${esc(f.value)}</textarea>`
   else if (f.type === 'checkbox') ctl = `<label class="flex items-center gap-2"><input type="checkbox" id="${id}" name="${f.name}" value="1" ${f.value ? 'checked' : ''}> ${f.checkLabel || ''}</label>`
-  else ctl = `<input class="input ${f.readonly ? 'bg-paper' : ''}" type="${f.type || 'text'}" value="${esc(f.value)}" placeholder="${f.placeholder || ''}" ${f.type === 'number' ? 'min="0" step="any"' : ''} ${common}>`
+  else ctl = `<input class="input ${f.readonly ? 'bg-paper' : ''}" type="${f.type || 'text'}" value="${esc(f.value)}" placeholder="${f.placeholder || ''}" ${f.type === 'number' ? `min="${f.min ?? 0}" step="any"` : ''} ${common}>`
   return `<div class="${f.span === 2 ? 'md:col-span-2' : ''}">
   <label class="label" for="${id}">${f.label}${f.required ? ' <span class="text-danger">*</span>' : ''}</label>${ctl}
   ${f.hint ? `<p class="mt-1 text-xs text-muted">${f.hint}</p>` : ''}
@@ -171,7 +182,7 @@ export const form = ({ title, crumbs, fields, back, submit = 'Save', extra = '',
   if (onSubmit) {
     const id = 'h' + ++handlerSeq
     handlers[id] = onSubmit
-    save = `busy = true; aimsForm.run('${id}', Object.fromEntries(new FormData($el))).then((r) => { busy = false; if (r.errors) err = r.errors; else ${after === null ? '' : `location.hash = '${after || back}'`} })`
+    save = `busy = true; aimsForm.run('${id}', Object.fromEntries(new FormData($el))).then((r) => { busy = false; if (r.errors) err = r.errors; else ${after === null ? '{}' : `location.hash = '${after || back}'`} })`
   }
   return (title ? header({ title, crumbs, actions }) : '') +
   `<form class="card grid max-w-4xl gap-4 p-5 md:grid-cols-2" novalidate x-data="{err:{}, busy:false}"

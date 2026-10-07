@@ -62,6 +62,7 @@ async function apiFetch(path, opts = {}) {
     location.href = 'login.html'
     throw new ApiError('Your session has expired. Please sign in again.', 401)
   }
+  if (res.status === 403) throw new ApiError(body.message && !/right roles/i.test(body.message) ? body.message : 'You do not have permission to do that.', 403)
   if (!res.ok) throw new ApiError(body.message || `Request failed (${res.status})`, res.status, body.errors)
   return body
 }
@@ -102,6 +103,13 @@ export async function updateProfile(payload) {
   return getUser()
 }
 
+// dataUrl: a small image as a data URL, or null to remove the photo. Allowed for every role.
+export async function updateAvatar(dataUrl) {
+  const data = await send('PUT', '/auth/avatar', { avatar: dataUrl })
+  saveUser({ ...(getUser() || {}), ...data.user })
+  return getUser()
+}
+
 // ── Data endpoints ─────────────────────────────────────────────────────────
 export const api = {
   contracts:      () => apiFetch('/contracts'),
@@ -110,9 +118,50 @@ export const api = {
   movements:      () => apiFetch('/inventory/movements'),
   invoices:       () => apiFetch('/invoices'),
 
+  clients:              () => apiFetch('/clients'),
   products:             () => apiFetch('/products'),
+  createProduct:        (b) => send('POST', '/products', b),
   suppliers:            () => apiFetch('/suppliers'),
+  supplier:             (id) => apiFetch('/suppliers/' + id),
   createSupplier:       (b) => send('POST', '/suppliers', b),
+  approveSupplier:      (id) => send('POST', `/suppliers/${id}/approve`, {}),
+  updateProduct:        (id, b) => send('PUT', `/products/${id}`, b),
+  updateSupplier:       (id, b) => send('PUT', `/suppliers/${id}`, b),
+  updatePriceAgreement: (id, b) => send('PUT', `/price-agreements/${id}`, b),
   priceAgreements:      () => apiFetch('/price-agreements'),
   createPriceAgreement: (b) => send('POST', '/price-agreements', b),
+
+  materials:            () => apiFetch('/materials'),
+  createMaterial:       (b) => send('POST', '/materials', b),
+  updateMaterial:       (id, b) => send('PUT', `/materials/${id}`, b),
+  stockMaterial:        (id, b) => send('POST', `/materials/${id}/stock`, b),
+  designs:              () => apiFetch('/designs'),
+  createDesign:         (b) => send('POST', '/designs', b),
+  approveDesign:        (id) => send('POST', `/designs/${id}/approve`, {}),
+  updateDesign:         (id, b) => send('PUT', `/designs/${id}`, b),
+  deleteDesign:         (id) => send('DELETE', `/designs/${id}`),
+  jobOrders:            () => apiFetch('/job-orders'),
+  jobOrderOptions:      () => apiFetch('/job-orders/options'),
+  createJobOrder:       (b) => send('POST', '/job-orders', b),
+  advanceJobOrder:      (id) => send('POST', `/job-orders/${id}/advance`, {}),
+  updateJobOrder:       (id, b) => send('PUT', `/job-orders/${id}`, b),
+  deleteJobOrder:       (id) => send('DELETE', `/job-orders/${id}`),
+
+  client:               (id) => apiFetch('/clients/' + id),
+  createClient:         (b) => send('POST', '/clients', b),
+  updateClient:         (id, b) => send('PUT', `/clients/${id}`, b),
+
+  inquiries:            () => apiFetch('/inquiries'),
+  updateInquiry:        (id, b) => send('PUT', `/inquiries/${id}`, b),
+  myInquiries:          () => apiFetch('/portal/inquiries'),
+  createPortalInquiry:  (b) => send('POST', '/portal/inquiries', b),
+  // No login needed (public website)
+  publicProducts:       () => apiFetch('/public/products', { auth: false }),
+  submitInquiry:        (b) => apiFetch('/public/inquiries', { method: 'POST', auth: false, body: JSON.stringify(b) }),
+
+  users:                () => apiFetch('/users'),
+  createUser:           (b) => send('POST', '/users', b),
+  updateUser:           (id, b) => send('PUT', `/users/${id}`, b),
+  settings:             () => apiFetch('/settings'),
+  updateSettings:       (b) => send('PUT', '/settings', b),
 }

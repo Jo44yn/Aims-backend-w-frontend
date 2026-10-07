@@ -1,6 +1,6 @@
 import { overlays, esc } from '../lib/ui.js'
 import { isAuthenticated, getUser, logout } from '../lib/api.js'
-import { logo } from '../lib/brand.js'
+import { logo, avatar } from '../lib/brand.js'
 
 window.aimsLogout = () => logout().finally(() => { location.href = 'login.html' })
 
@@ -19,7 +19,7 @@ export const portalLayout = () => {
     <nav class="flex flex-wrap gap-1" aria-label="Portal">
       ${LINKS.map(([h, l]) => `<a class="nav-link !py-1.5" data-nav href="#${h}">${l}</a>`).join('')}
     </nav>
-    <div class="ml-auto flex items-center gap-3 text-sm"><span class="hidden text-white/70 sm:inline">${esc(user.name)}</span><button class="btn btn-gold" @click="aimsLogout()">Sign out</button></div>
+    <div class="ml-auto flex items-center gap-3 text-sm"><a href="#/portal/profile" class="flex items-center gap-2">${avatar(user, 'h-8 w-8', 'text-xs')}<span class="hidden text-white/80 sm:inline">${esc(user.name)}</span></a><button class="btn btn-gold" @click="aimsLogout()">Sign out</button></div>
   </div>
 </header>
 <main id="view" class="mx-auto max-w-6xl p-4 lg:py-6"></main>

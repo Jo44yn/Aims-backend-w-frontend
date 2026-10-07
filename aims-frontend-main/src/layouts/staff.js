@@ -1,6 +1,6 @@
 import { overlays, role, esc } from '../lib/ui.js'
 import { isAuthenticated, getUser, logout, homeFor } from '../lib/api.js'
-import { logo } from '../lib/brand.js'
+import { logo, avatar } from '../lib/brand.js'
 
 window.aimsLogout = () => logout().finally(() => { location.href = 'login.html' })
 
@@ -60,7 +60,6 @@ export function staffLayout() {
     return ''
   }
   const r = role()
-  const initials = (user ? user.name : 'U').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
   const nav = NAV.map(([group, items]) => {
     const shown = items.filter(([m]) => ACCESS[m].includes(r))
     if (!shown.length) return ''
@@ -89,7 +88,7 @@ export function staffLayout() {
         <span class="badge badge-teal hidden sm:inline-block">${ROLE_LABEL[r] || r}</span>
         <a href="#/notifications" class="btn btn-ghost relative" aria-label="Notifications">🔔</a>
         <div class="relative" x-data="{m:false}">
-          <button class="btn btn-ghost" @click="m=!m" aria-haspopup="true"><span class="grid h-6 w-6 place-items-center rounded-full bg-primary text-[11px] text-white">${initials}</span>${user ? esc(user.name) : ROLE_LABEL[r] || r} ▾</button>
+          <button class="btn btn-ghost" @click="m=!m" aria-haspopup="true">${avatar(user || { name: 'U' }, 'h-7 w-7', 'text-[11px]')}${user ? esc(user.name) : ROLE_LABEL[r] || r} ▾</button>
           <div x-show="m" x-cloak @click.outside="m=false" class="card absolute right-0 mt-1 w-48 p-1">
             <a class="block rounded px-3 py-2 hover:bg-paper" href="#/profile" @click="m=false">My profile</a>
             <button class="block w-full rounded px-3 py-2 text-left hover:bg-paper" @click="aimsLogout()">Sign out</button>

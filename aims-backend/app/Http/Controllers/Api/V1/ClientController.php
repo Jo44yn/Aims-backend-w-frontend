@@ -28,6 +28,33 @@ class ClientController extends Controller
         ]);
     }
 
+    public function update(Request $request, Client $client): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'branch' => 'required|string|max:50',
+            'type' => 'required|in:government,private',
+            'tin' => 'nullable|string|max:30',
+            'contact' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:30',
+            'email' => 'nullable|email',
+            'address' => 'nullable|string',
+        ]);
+
+        $client->update([
+            'name' => $data['name'],
+            'branch' => $data['branch'],
+            'type' => $data['type'],
+            'tin' => $data['tin'] ?? null,
+            'contact_person' => $data['contact'],
+            'phone' => $data['phone'] ?? null,
+            'email' => $data['email'] ?? null,
+            'address' => $data['address'] ?? null,
+        ]);
+
+        return response()->json(['data' => ApiPresent::client($client)]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([

@@ -1,5 +1,6 @@
-import { products, categories } from '../lib/data.js'
-import { form } from '../lib/ui.js'
+import { form, esc } from '../lib/ui.js'
+import { api } from '../lib/api.js'
+import { asyncRoute, unwrap } from '../lib/source.js'
 import { errorRoutes } from './errors.js'
 
 const PARTNERS = ['Rudy Project Philippines', 'Under Armour', 'Propper USA', '361 Degrees Philippines']
@@ -13,8 +14,8 @@ const card = (p) => `
 <a href="#/products/${p.slug}" class="card block p-4 transition-shadow hover:shadow-md">
   <div class="mb-3 grid h-32 place-items-center rounded-md bg-paper font-head text-3xl text-primary/40">${p.category}</div>
   <p class="text-xs font-semibold uppercase text-muted">${p.category}</p>
-  <h3 class="font-head text-lg text-primary">${p.name}</h3>
-  <p class="mt-1 text-sm text-muted">Sizes: ${p.sizes.join(', ')}</p>
+  <h3 class="font-head text-lg text-primary">${esc(p.name)}</h3>
+  <p class="mt-1 text-sm text-muted">Sizes: ${esc((p.sizes || []).join(', ') || '—')}</p>
 </a>`
 
 // P01
@@ -41,38 +42,42 @@ const home = () => `
   <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">${PARTNERS.map((p) => `<div class="grid h-20 place-items-center rounded-lg border border-line font-head text-lg text-muted">${p}</div>`).join('')}</div>
 </div></section>`
 
-// P02
-const catalog = () => `
+// P02 – only products marked available are listed (from the API, no login needed)
+const catalog = asyncRoute('products', async () => {
+  const products = unwrap(await api.publicProducts())
+  const categories = [...new Set(products.map((p) => p.category))]
+  return `
 <section class="mx-auto max-w-6xl px-4 py-10" x-data="{c:''}">
   <h1 class="font-head text-3xl text-primary">Product catalog</h1>
   <p class="mt-1 text-muted">Prices are quoted per contract. <a class="link" href="#/rfq">Request a quotation</a>.</p>
   <div class="mt-4 flex flex-wrap gap-2">
     <button class="btn btn-ghost" :class="c==='' &amp;&amp; '!bg-primary !text-white'" @click="c=''">All</button>
-    ${categories.map((c) => `<button class="btn btn-ghost" :class="c==='${c}' &amp;&amp; '!bg-primary !text-white'" @click="c='${c}'">${c}</button>`).join('')}
+    ${categories.map((c) => `<button class="btn btn-ghost" :class="c==='${esc(c)}' &amp;&amp; '!bg-primary !text-white'" @click="c='${esc(c)}'">${esc(c)}</button>`).join('')}
   </div>
-  <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">${products.map((p) => `<div x-show="c===''||c==='${p.category}'">${card(p)}</div>`).join('')}</div>
+  <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">${products.map((p) => `<div x-show="c===''||c==='${esc(p.category)}'">${card(p)}</div>`).join('') || '<p class="text-muted">No products are listed right now.</p>'}</div>
 </section>`
+})
 
 // P03
-const detail = ({ slug }) => {
-  const p = products.find((x) => x.slug === slug)
-  if (!p) return `<div class="p-16 text-center"><h1 class="font-head text-2xl">Product not found</h1><a class="link" href="#/products">Back to catalog</a></div>`
+const detail = asyncRoute('product', async ({ slug }) => {
+  const p = unwrap(await api.publicProducts()).find((x) => x.slug === slug)
+  if (!p) return `<div class="p-16 text-center"><h1 class="font-head text-2xl">Product not found</h1><p class="mt-1 text-muted">It may be unavailable right now.</p><a class="link" href="#/products">Back to catalog</a></div>`
   return `
 <section class="mx-auto max-w-6xl px-4 py-10">
   <a class="link text-sm" href="#/products">← All products</a>
   <div class="mt-4 grid gap-8 md:grid-cols-2">
-    <div class="grid h-72 place-items-center rounded-lg bg-white font-head text-4xl text-primary/30 shadow-sm">${p.category}</div>
+    <div class="grid h-72 place-items-center rounded-lg bg-white font-head text-4xl text-primary/30 shadow-sm">${esc(p.category)}</div>
     <div>
-      <p class="text-xs font-semibold uppercase text-muted">${p.category} · ${p.code}</p>
-      <h1 class="font-head text-3xl text-primary">${p.name}</h1>
-      <p class="mt-3">${p.spec}</p>
+      <p class="text-xs font-semibold uppercase text-muted">${esc(p.category)} · ${esc(p.code)}</p>
+      <h1 class="font-head text-3xl text-primary">${esc(p.name)}</h1>
+      <p class="mt-3">${esc(p.spec || '')}</p>
       <h2 class="mt-5 text-sm font-semibold">Available sizes</h2>
-      <div class="mt-2 flex flex-wrap gap-2">${p.sizes.map((s) => `<span class="rounded-md border border-line bg-white px-3 py-1 text-sm">${s}</span>`).join('')}</div>
+      <div class="mt-2 flex flex-wrap gap-2">${(p.sizes || []).map((s) => `<span class="rounded-md border border-line bg-white px-3 py-1 text-sm">${esc(s)}</span>`).join('')}</div>
       <a class="btn btn-primary mt-6" href="#/rfq">Request a quotation</a>
     </div>
   </div>
 </section>`
-}
+})
 
 const about = () => `
 <section class="mx-auto max-w-4xl px-4 py-10">
@@ -93,6 +98,7 @@ const rfq = () =>
     crumbs: [['Home', '#/'], ['Request a quotation']],
     back: '/',
     submit: 'Send request',
+    onSubmit: async (d) => { await api.submitInquiry({ name: d.name.trim(), org: d.org.trim(), email: d.email.trim(), phone: d.phone || null, items: d.items.trim() }); return 'Thank you! We received your request and will reply by email.' },
     fields: [
       { name: 'name', label: 'Your name', required: true },
       { name: 'org', label: 'Organization / unit', required: true },

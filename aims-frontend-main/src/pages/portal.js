@@ -1,7 +1,8 @@
-import { contracts, contractItems, portalDocs, inquiries } from '../lib/data.js'
+import { contracts, contractItems, portalDocs } from '../lib/data.js'
 import { esc, badge, bar, header, kpi, listPage, peso, table, timeline, form, link } from '../lib/ui.js'
 import { errorRoutes } from './errors.js'
-import { getUser } from '../lib/api.js'
+import { getUser, api } from '../lib/api.js'
+import { asyncRoute, unwrap } from '../lib/source.js'
 import { profileRoute } from './profile.js'
 
 const mine = contracts.filter((c) => c.clientId === 1) // this portal user belongs to client 1
@@ -58,15 +59,17 @@ const documents = () => listPage({
   rows: portalDocs, statusKey: 'type',
 })
 
-// C05
-const inq = () => listPage({
+// C05 – the client's own quotation requests (from the API)
+const inq = asyncRoute('your inquiries', async () => listPage({
   title: 'Inquiries', crumbs: [['Portal', '#/portal'], ['Inquiries']],
   action: link('#/portal/inquiries/new', '+ New quotation request').replace('class="link"', 'class="btn btn-primary"'),
-  cols: [{ k: 'date', label: 'Date' }, { k: 'items', label: 'Items' }, { label: 'Status', render: (r) => badge(r.status) }],
-  rows: inquiries.slice(0, 2), statusKey: 'status',
-})
+  note: 'Our team replies by email. The status changes to Quoted once a quotation was sent.',
+  cols: [{ k: 'date', label: 'Date' }, { label: 'Items', render: (r) => `<span class="whitespace-pre-line">${esc(r.items)}</span>` }, { k: 'neededBy', label: 'Needed by' }, { label: 'Status', render: (r) => badge(r.status) }],
+  rows: unwrap(await api.myInquiries()), statusKey: 'status',
+}))
 const inqNew = () => form({
   title: 'New quotation request', crumbs: [['Portal', '#/portal'], ['Inquiries', '#/portal/inquiries'], ['New']], back: '/portal/inquiries', submit: 'Send request',
+  onSubmit: async (d) => { await api.createPortalInquiry({ items: d.items.trim(), needed_by: d.needed || null }); return 'Request sent. We will reply by email.' },
   fields: [{ name: 'items', label: 'Items and quantities', type: 'textarea', span: 2, required: true }, { name: 'needed', label: 'Needed by', type: 'date' }],
 })
 
