@@ -1,6 +1,8 @@
 import { contracts, contractItems, portalDocs, inquiries } from '../lib/data.js'
-import { badge, bar, header, kpi, listPage, peso, table, timeline, form, link } from '../lib/ui.js'
+import { esc, badge, bar, header, kpi, listPage, peso, table, timeline, form, link } from '../lib/ui.js'
 import { errorRoutes } from './errors.js'
+import { getUser } from '../lib/api.js'
+import { profileRoute } from './profile.js'
 
 const mine = contracts.filter((c) => c.clientId === 1) // this portal user belongs to client 1
 
@@ -13,7 +15,7 @@ const progressCard = (c) => `
 
 // C01
 const dashboard = () => `
-${header({ title: 'Welcome, 1st Infantry Division', crumbs: [['Portal']] })}
+${header({ title: 'Welcome, ' + esc((getUser() || {}).name || 'client'), crumbs: [['Portal']] })}
 <div class="grid gap-4 sm:grid-cols-3">
   ${kpi('Active contracts', mine.filter((c) => c.status === 'In progress').length, 'In progress', 'primary')}
   ${kpi('Next delivery', 'Nov 5', 'DR-2026-0028 scheduled', 'info')}
@@ -68,14 +70,8 @@ const inqNew = () => form({
   fields: [{ name: 'items', label: 'Items and quantities', type: 'textarea', span: 2, required: true }, { name: 'needed', label: 'Needed by', type: 'date' }],
 })
 
-// C06
-const profile = () => form({
-  title: 'Account', crumbs: [['Portal', '#/portal'], ['Account']], back: '/portal',
-  fields: [
-    { name: 'name', label: 'Contact person', required: true }, { name: 'phone', label: 'Phone' },
-    { name: 'email', label: 'Email', type: 'email', required: true }, { name: 'pw', label: 'New password', type: 'password', hint: 'Leave blank to keep the current password.' },
-  ],
-})
+// C06 – real account of the signed-in client (see pages/profile.js)
+const profile = profileRoute({ crumbs: [['Portal', '#/portal'], ['Account']], back: '/portal' })
 
 export const portalRoutes = [
   { path: '/portal', render: dashboard },

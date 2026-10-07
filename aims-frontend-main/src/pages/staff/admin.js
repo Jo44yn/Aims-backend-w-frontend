@@ -1,5 +1,6 @@
 import { notifications, users, audit } from '../../lib/data.js'
 import { ask, badge, form, header, listPage } from '../../lib/ui.js'
+import { profileRoute } from '../profile.js'
 
 // S32
 const alerts = () => header({ title: 'Notifications', crumbs: [['Home', '#/dashboard'], ['Notifications']], actions: `<button class="btn btn-ghost" @click="$store.ui.toast('All marked as read (demo)')">Mark all read</button>` }) + `
@@ -41,11 +42,8 @@ const auditLog = () => listPage({
   rows: audit, statusKey: 'action',
 })
 
-// S36
-const profile = () => form({
-  title: 'My profile', crumbs: [['Home', '#/dashboard'], ['Profile']], back: '/dashboard',
-  fields: [{ name: 'name', label: 'Name', required: true }, { name: 'email', label: 'Email', type: 'email', required: true }, { name: 'pw', label: 'New password', type: 'password' }, { name: 'pw2', label: 'Confirm new password', type: 'password' }],
-})
+// S36 – real profile of the signed-in user (see pages/profile.js)
+const profile = profileRoute({ crumbs: [['Home', '#/dashboard'], ['Profile']], back: '/dashboard' })
 
 export const adminRoutes = [
   { path: '/notifications', render: alerts },

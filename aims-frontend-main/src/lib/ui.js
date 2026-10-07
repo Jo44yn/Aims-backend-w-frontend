@@ -1,7 +1,11 @@
 export const peso = (n) => '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const num = (n) => Number(n).toLocaleString('en-PH')
+// The role comes from the signed-in user (stored at login/sign-up), not from a demo switcher.
 export const role = () => {
-  try { return localStorage.getItem('aims_role') || 'gm' } catch { return 'gm' }
+  try {
+    const u = JSON.parse(localStorage.getItem('aims_user') || 'null')
+    return (u && u.role) || localStorage.getItem('aims_role') || 'gm'
+  } catch { return 'gm' }
 }
 
 // One colour per meaning on every screen (blueprint: status badges).
@@ -41,7 +45,7 @@ export function table({ cols, rows, statusKey, search = true }) {
   <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
     ${search ? `<input class="input max-w-xs" placeholder="Search…" aria-label="Search table" x-model="q">` : ''}
     ${statuses.length ? `<select class="input max-w-[190px]" aria-label="Filter by status" x-model="s"><option value="">All statuses</option>${statuses.map((s) => `<option>${s}</option>`).join('')}</select>` : ''}
-    <button class="btn btn-ghost ml-auto" @click="$store.ui.toast('Export started (demo)')">Export CSV</button>
+    <button class="btn btn-ghost ml-auto" @click="aimsCsv($el)">Export CSV</button>
   </div>
   <div class="overflow-x-auto">
     <table class="tbl">
@@ -109,28 +113,74 @@ export const ask = (label, o = {}) => {
   return `<button type="button" class="btn ${o.danger ? 'btn-danger' : o.cls || 'btn-primary'}" @click='$store.ui.ask(${json})'>${label}</button>`
 }
 
+export const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
 const field = (f) => {
   const id = 'f_' + f.name
-  const common = `id="${id}" name="${f.name}" ${f.required ? 'required' : ''} :class="err['${f.name}'] &amp;&amp; 'border-danger'"`
+  const common = `id="${id}" name="${f.name}" ${f.required ? 'required' : ''} ${f.readonly ? 'readonly' : ''} :class="err['${f.name}'] &amp;&amp; 'border-danger'"`
   let ctl
-  if (f.type === 'select') ctl = `<select class="input" ${common}><option value="">Select…</option>${f.options.map((o) => `<option>${o}</option>`).join('')}</select>`
-  else if (f.type === 'textarea') ctl = `<textarea class="input" rows="3" ${common}></textarea>`
-  else ctl = `<input class="input" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" ${f.type === 'number' ? 'min="0"' : ''} ${common}>`
+  if (f.type === 'select') {
+    const opts = f.options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }))
+    ctl = `<select class="input" ${common}><option value="">Select…</option>${opts.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(f.value ?? '') ? 'selected' : ''}>${o.label}</option>`).join('')}</select>`
+  } else if (f.type === 'textarea') ctl = `<textarea class="input" rows="3" ${common}>${esc(f.value)}</textarea>`
+  else if (f.type === 'checkbox') ctl = `<label class="flex items-center gap-2"><input type="checkbox" id="${id}" name="${f.name}" value="1" ${f.value ? 'checked' : ''}> ${f.checkLabel || ''}</label>`
+  else ctl = `<input class="input ${f.readonly ? 'bg-paper' : ''}" type="${f.type || 'text'}" value="${esc(f.value)}" placeholder="${f.placeholder || ''}" ${f.type === 'number' ? 'min="0" step="any"' : ''} ${common}>`
   return `<div class="${f.span === 2 ? 'md:col-span-2' : ''}">
   <label class="label" for="${id}">${f.label}${f.required ? ' <span class="text-danger">*</span>' : ''}</label>${ctl}
   ${f.hint ? `<p class="mt-1 text-xs text-muted">${f.hint}</p>` : ''}
   <p class="mt-1 text-xs text-danger" x-show="err['${f.name}']" x-text="err['${f.name}']"></p></div>`
 }
 
-// Form with inline validation. Saving is a demo: toast and go back.
-export const form = ({ title, crumbs, fields, back, submit = 'Save', extra = '' }) =>
-  header({ title, crumbs }) +
-  `<form class="card grid max-w-4xl gap-4 p-5 md:grid-cols-2" novalidate x-data="{err:{}}"
-    @submit.prevent="err={}; $el.querySelectorAll('[required]').forEach(i => { if (!String(i.value).trim()) err[i.name] = 'This field is required' }); if (!Object.keys(err).length) { $store.ui.toast('Saved (demo only)'); location.hash = '${back}' }">
+// Real submit handlers live here so the generated HTML only needs an id.
+const handlers = {}
+let handlerSeq = 0
+window.aimsForm = {
+  // Runs a handler; resolves { ok } or { errors } so the form can show server messages inline.
+  async run(id, data) {
+    try {
+      const msg = await handlers[id](data)
+      window.Alpine.store('ui').toast(msg || 'Saved')
+      return { ok: true }
+    } catch (e) {
+      window.Alpine.store('ui').toast(e.message || 'Could not save')
+      return { errors: e.fields || {} }
+    }
+  },
+}
+
+// Export the visible rows of the table next to the clicked button as CSV.
+window.aimsCsv = (btn) => {
+  const t = btn.closest('.card').querySelector('table')
+  const cell = (c) => '"' + c.textContent.trim().replace(/"/g, '""') + '"'
+  const rows = [...t.rows].filter((r) => r.offsetParent !== null || r.parentNode.tagName === 'THEAD')
+  const csv = rows.map((r) => [...r.cells].map(cell).join(',')).join('\r\n')
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })),
+    download: (document.title.split(' | ')[0] || 'export').toLowerCase().replace(/\W+/g, '-') + '.csv',
+  })
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// Form with inline validation.
+// Without `onSubmit` it is a demo (toast + go back). With `onSubmit(data)` (async, returns a toast message,
+// throws ApiError on failure) the data is really sent, server validation errors show under each field,
+// and on success it goes to `after` (default: `back`).
+export const form = ({ title, crumbs, fields, back, submit = 'Save', extra = '', onSubmit, after, actions = '' }) => {
+  let save = `$store.ui.toast('Saved (demo only)'); location.hash = '${back}'`
+  if (onSubmit) {
+    const id = 'h' + ++handlerSeq
+    handlers[id] = onSubmit
+    save = `busy = true; aimsForm.run('${id}', Object.fromEntries(new FormData($el))).then((r) => { busy = false; if (r.errors) err = r.errors; else ${after === null ? '' : `location.hash = '${after || back}'`} })`
+  }
+  return (title ? header({ title, crumbs, actions }) : '') +
+  `<form class="card grid max-w-4xl gap-4 p-5 md:grid-cols-2" novalidate x-data="{err:{}, busy:false}"
+    @submit.prevent="err={}; $el.querySelectorAll('[required]').forEach(i => { if (!String(i.value).trim()) err[i.name] = 'This field is required' }); if (!Object.keys(err).length) { ${save} }">
   ${fields.map(field).join('')}
   ${extra}
-  <div class="flex justify-end gap-2 md:col-span-2"><a class="btn btn-ghost" href="#${back}">Cancel</a><button class="btn btn-primary">${submit}</button></div>
+  <div class="flex justify-end gap-2 md:col-span-2"><a class="btn btn-ghost" href="#${back}">Cancel</a><button class="btn btn-primary" :disabled="busy" :class="busy &amp;&amp; 'opacity-75'">${submit}</button></div>
 </form>`
+}
 
 // Toasts + confirm modal. Place once in every layout.
 export const overlays = () => `
