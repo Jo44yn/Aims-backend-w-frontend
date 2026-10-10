@@ -117,12 +117,15 @@ class ApiPresent
             'category' => $p->category?->name ?? '—',
             'sourcing' => self::status($p->sourcing_type),
             'uom' => $p->uom,
-            'sizes' => $variants->pluck('size')->filter()->values()->all(),
+            'sizes' => $variants->where('is_active', true)->pluck('size')->filter()->values()->all(),
             'spec' => $p->specifications,
+            'active' => (bool) $p->is_active,
+            'sourcingType' => $p->sourcing_type,
             'variants' => $variants->map(fn ($v) => [
                 'id' => $v->id,
                 'sku' => $v->sku,
                 'size' => $v->size,
+                'active' => (bool) $v->is_active,
             ])->all(),
         ];
     }
@@ -150,6 +153,10 @@ class ApiPresent
             'preferred' => $p->is_preferred ? 'Yes' : 'No',
             'status' => self::status($status),
             'days' => $days,
+            'fromIso' => $p->valid_from?->toDateString(),
+            'toIso' => $p->valid_to?->toDateString(),
+            'isPreferred' => (bool) $p->is_preferred,
+            'cancelled' => $p->status === 'cancelled',
         ];
     }
 
@@ -375,6 +382,7 @@ class ApiPresent
             'reorder' => (float) $m->reorder_point,
             'cost' => (float) $m->avg_unit_cost,
             'supplier' => $m->supplier?->name ?? '—',
+            'supplierId' => $m->supplier_id,
         ];
     }
 
@@ -385,6 +393,8 @@ class ApiPresent
             'name' => $d->name,
             'client' => $d->client?->name ?? '—',
             'size' => $d->size,
+            'clientId' => $d->client_id,
+            'colors' => $d->colors,
             'stitches' => (int) $d->stitch_count,
             'approved' => self::date($d->approved_by_client_at),
             'status' => $d->approved_by_client_at ? 'Approved' : 'Pending',
@@ -401,6 +411,11 @@ class ApiPresent
             'qty' => (int) $j->quantity,
             'due' => self::date($j->due_date),
             'machine' => $j->machine_no ?: '—',
+            'machineNo' => $j->machine_no,
+            'contractItemId' => $j->contract_item_id,
+            'designId' => $j->patch_design_id,
+            'startIso' => $j->start_date?->toDateString(),
+            'dueIso' => $j->due_date?->toDateString(),
             'status' => self::status($j->status),
         ];
     }
@@ -427,8 +442,11 @@ class ApiPresent
             'name' => $u->name,
             'email' => $u->email,
             'role' => $u->getRoleNames()->first() ?: '—',
-            'status' => 'Active',
-            'last' => self::datetime($u->updated_at),
+            'status' => $u->is_active ? 'Active' : 'Inactive',
+            'active' => (bool) $u->is_active,
+            'clientId' => $u->client_id,
+            'phone' => $u->phone,
+            'last' => $u->last_login_at ? self::datetime($u->last_login_at) : 'Never',
         ];
     }
 }

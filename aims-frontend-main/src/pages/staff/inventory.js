@@ -1,5 +1,7 @@
-import { goodsReceipts, qaQueue, returns, movements, materials, contractItems, purchaseOrders } from '../../lib/data.js'
-import { badge, bar, form, header, link, listPage, num, peso, table } from '../../lib/ui.js'
+import { goodsReceipts, qaQueue, returns, movements, contractItems, purchaseOrders } from '../../lib/data.js'
+import { badge, bar, can, esc, form, header, link, listPage, num, peso, table } from '../../lib/ui.js'
+import { api } from '../../lib/api.js'
+import { asyncRoute, unwrap } from '../../lib/source.js'
 
 // S17 – post a goods receipt against a PO or job order
 const receiving = () => header({ title: 'Receiving', crumbs: [['Home', '#/dashboard'], ['Receiving']], actions: `<a class="btn btn-primary" href="#/receiving/new">+ Post goods receipt</a>` }) + table({
@@ -52,12 +54,65 @@ const ledger = () => listPage({
   rows: movements, statusKey: 'type',
 })
 
-// S22
-const materialsPage = () => listPage({
-  title: 'Raw materials', crumbs: [['Home', '#/dashboard'], ['Materials']], note: 'The one exception to JIT: patch inputs are kept on hand with a reorder point (BR-19).',
-  cols: [{ k: 'code', label: 'Code' }, { k: 'name', label: 'Material' }, { k: 'onHand', label: 'On hand', right: true }, { k: 'reorder', label: 'Reorder point', right: true }, { k: 'cost', label: 'Avg cost', right: true, render: (r) => peso(r.cost) }, { k: 'supplier', label: 'Supplier' },
-    { label: 'Level', render: (r) => (r.onHand <= r.reorder ? '<span class="badge badge-amber">Reorder</span>' : '<span class="badge badge-green">OK</span>') }],
-  rows: materials.map((m) => ({ ...m, level: m.onHand <= m.reorder ? 'Reorder' : 'OK' })), statusKey: 'level',
+// S22 – raw materials (from the API)
+const materialsPage = asyncRoute('raw materials', async () => listPage({
+  title: 'Raw materials', crumbs: [['Home', '#/dashboard'], ['Materials']], action: can('production') ? `<a class="btn btn-primary" href="#/materials/new">+ New raw material</a>` : '',
+  note: 'The one exception to JIT: patch inputs are kept on hand with a reorder point (BR-19).',
+  cols: [{ k: 'code', label: 'Code' }, { k: 'name', label: 'Material' }, { k: 'uom', label: 'UoM' }, { k: 'onHand', label: 'On hand', right: true }, { k: 'reorder', label: 'Reorder point', right: true }, { k: 'cost', label: 'Avg cost', right: true, render: (r) => peso(r.cost) }, { k: 'supplier', label: 'Supplier' },
+    { label: 'Level', render: (r) => (r.onHand <= r.reorder ? '<span class="badge badge-amber">Reorder</span>' : '<span class="badge badge-green">OK</span>') },
+    ...(can('production') ? [{ label: '', render: (r) => `<div class="flex gap-1"><a class="btn btn-ghost !py-1" href="#/materials/${r.id}/stock">Add / remove stock</a><a class="btn btn-ghost !py-1" href="#/materials/${r.id}/edit">Edit</a></div>` }] : [])],
+  rows: unwrap(await api.materials()).map((m) => ({ ...m, level: m.onHand <= m.reorder ? 'Reorder' : 'OK' })), statusKey: 'level',
+}))
+
+const materialFields = (suppliers, m = {}) => [
+  { name: 'name', label: 'Material name', required: true, span: 2, placeholder: 'Embroidery thread, navy (cone)', value: m.name },
+  { name: 'uom', label: 'Unit of measure', required: true, placeholder: 'cone, meter, roll…', value: m.uom },
+  { name: 'supplier_id', label: 'Usual supplier', type: 'select', options: suppliers.map((s) => ({ value: s.id, label: esc(s.name) })), value: m.supplierId },
+  ...(m.id ? [] : [{ name: 'on_hand', label: 'Opening stock on hand', type: 'number' }]),
+  { name: 'reorder_point', label: 'Reorder point', type: 'number', hint: 'You are warned when stock falls to this level.', value: m.reorder },
+  { name: 'avg_unit_cost', label: 'Unit cost (₱)', type: 'number', value: m.cost },
+]
+const materialBody = (d) => ({
+  name: d.name.trim(), uom: d.uom.trim(), reorder_point: d.reorder_point === '' ? 0 : Number(d.reorder_point),
+  avg_unit_cost: d.avg_unit_cost === '' ? 0 : Number(d.avg_unit_cost), supplier_id: d.supplier_id ? Number(d.supplier_id) : null,
+})
+
+const materialForm = asyncRoute('suppliers', async () => {
+  const suppliers = unwrap(await api.suppliers())
+  return form({
+    title: 'New raw material', crumbs: [['Home', '#/dashboard'], ['Materials', '#/materials'], ['New']], back: '/materials', submit: 'Create material',
+    onSubmit: async (d) => { await api.createMaterial({ ...materialBody(d), on_hand: d.on_hand === '' ? 0 : Number(d.on_hand) }); return `Material "${d.name}" created.` },
+    fields: materialFields(suppliers),
+  })
+})
+
+const materialEdit = asyncRoute('material', async ({ id }) => {
+  const [suppliers, rows] = await Promise.all([api.suppliers().then(unwrap), api.materials().then(unwrap)])
+  const m = rows.find((x) => String(x.id) === String(id))
+  if (!m) return `<p class="p-10 text-center">Material not found.</p>`
+  return form({
+    title: `Edit ${esc(m.name)}`, crumbs: [['Home', '#/dashboard'], ['Materials', '#/materials'], [m.code]], back: '/materials', submit: 'Save changes',
+    onSubmit: async (d) => { await api.updateMaterial(m.id, materialBody(d)); return `${d.name} updated.` },
+    fields: materialFields(suppliers, m),
+  })
+})
+
+// Stock in (a purchase) or out / correction (a negative number), keeping the weighted-average cost.
+const materialStock = asyncRoute('material', async ({ id }) => {
+  const m = unwrap(await api.materials()).find((x) => String(x.id) === String(id))
+  if (!m) return `<p class="p-10 text-center">Material not found.</p>`
+  return form({
+    title: `Stock: ${esc(m.name)}`, crumbs: [['Home', '#/dashboard'], ['Materials', '#/materials'], [m.code]], back: '/materials', submit: 'Update stock',
+    onSubmit: async (d) => {
+      await api.stockMaterial(m.id, { quantity: Number(d.quantity), unit_cost: d.unit_cost === '' ? null : Number(d.unit_cost) })
+      return `${m.name}: ${Number(d.quantity) > 0 ? 'added' : 'removed'} ${Math.abs(Number(d.quantity))} ${m.uom}.`
+    },
+    fields: [
+      { name: 'current', label: `On hand now (${m.uom})`, readonly: true, value: m.onHand },
+      { name: 'quantity', label: 'Quantity to add (negative to remove)', type: 'number', min: -1000000, required: true, hint: 'Example: 20 when a delivery arrives, -3 to correct a miscount or record spoilage.' },
+      { name: 'unit_cost', label: 'Unit cost of this delivery (₱)', type: 'number', hint: 'Optional. Used to update the average cost when adding stock.' },
+    ],
+  })
 })
 
 export const inventoryRoutes = [
@@ -68,4 +123,7 @@ export const inventoryRoutes = [
   { path: '/inventory', render: stock },
   { path: '/inventory/movements', render: ledger },
   { path: '/materials', render: materialsPage },
+  { path: '/materials/new', render: materialForm },
+  { path: '/materials/:id/edit', render: materialEdit },
+  { path: '/materials/:id/stock', render: materialStock },
 ]
