@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -28,7 +29,51 @@ class AuthController extends Controller
             return response()->json(['message' => 'This account is deactivated. Contact the administrator.'], 403);
         }
 
-        $user->forceFill(['last_login_at' => now()])->save();
+        // Generate 6-digit MFA Code (valid for 5 minutes)
+        $mfaCode = (string) random_int(100000, 999999);
+        $user->forceFill([
+            'mfa_code' => Hash::make($mfaCode),
+            'mfa_expires_at' => now()->addMinutes(5),
+        ])->save();
+
+        Log::info("MFA Code for {$user->email}: {$mfaCode}");
+
+        return response()->json([
+            'mfa_required' => true,
+            'email' => $user->email,
+            'message' => 'MFA code generated. Check log or dev_code.',
+            'dev_code' => $mfaCode, // Included for convenient local testing
+        ]);
+    }
+
+    public function verifyMfa(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'code' => 'required|string|size:6',
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (! $user || ! $user->mfa_code || ! $user->mfa_expires_at) {
+            return response()->json(['message' => 'No active MFA request found. Please sign in again.'], 400);
+        }
+
+        if (now()->greaterThan($user->mfa_expires_at)) {
+            return response()->json(['message' => 'MFA code has expired. Please sign in again.'], 422);
+        }
+
+        if (! Hash::check($request->code, $user->mfa_code)) {
+            return response()->json(['message' => 'Invalid verification code.'], 422);
+        }
+
+        // Clear MFA code and update last login timestamp after successful verification
+        $user->forceFill([
+            'mfa_code' => null,
+            'mfa_expires_at' => null,
+            'last_login_at' => now(),
+        ])->save();
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
