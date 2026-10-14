@@ -45,7 +45,9 @@ export class ApiError extends Error {
 
 async function apiFetch(path, opts = {}) {
   const { auth = true, ...init } = opts
-  const headers = { 'Content-Type': 'application/json', Accept: 'application/json', ...(init.headers || {}) }
+  // FormData (file uploads) sets its own multipart Content-Type with the boundary.
+  const isForm = init.body instanceof FormData
+  const headers = { ...(isForm ? {} : { 'Content-Type': 'application/json' }), Accept: 'application/json', ...(init.headers || {}) }
   const token = getToken()
   if (auth && token) headers.Authorization = 'Bearer ' + token
 
@@ -126,6 +128,8 @@ export const api = {
   createSupplier:       (b) => send('POST', '/suppliers', b),
   approveSupplier:      (id) => send('POST', `/suppliers/${id}/approve`, {}),
   updateProduct:        (id, b) => send('PUT', `/products/${id}`, b),
+  uploadProductImage:   (id, file) => { const fd = new FormData(); fd.append('image', file); return apiFetch(`/products/${id}/image`, { method: 'POST', body: fd }) },
+  deleteProductImage:   (id) => send('DELETE', `/products/${id}/image`),
   updateSupplier:       (id, b) => send('PUT', `/suppliers/${id}`, b),
   updatePriceAgreement: (id, b) => send('PUT', `/price-agreements/${id}`, b),
   priceAgreements:      () => apiFetch('/price-agreements'),

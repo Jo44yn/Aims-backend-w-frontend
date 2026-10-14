@@ -21,10 +21,24 @@ const productPayload = (d) => ({
   sizes: d.sizes || null, specifications: d.specifications || null, is_active: d.is_active === undefined ? true : !!d.is_active,
 })
 
+// Product photo: sent separately (multipart) after the product itself is saved.
+const MAX_PHOTO_MB = 5
+const savePhoto = async (id, d) => {
+  if (d.image && d.image.size) {
+    if (d.image.size > MAX_PHOTO_MB * 1024 * 1024) throw Object.assign(new Error(`The photo must be smaller than ${MAX_PHOTO_MB} MB.`), { fields: { image: `Smaller than ${MAX_PHOTO_MB} MB, please.` } })
+    await api.uploadProductImage(id, d.image)
+  } else if (d.remove_image) {
+    await api.deleteProductImage(id)
+  }
+}
+const thumb = (p, size = 'h-10 w-10') => p.image
+  ? `<img src="${esc(p.image)}" alt="" class="${size} shrink-0 rounded-md border border-line object-cover">`
+  : `<span class="${size} grid shrink-0 place-items-center rounded-md bg-paper text-xs text-muted" aria-hidden="true">—</span>`
+
 const productList = asyncRoute('products', async () => listPage({
   title: 'Products & variants', crumbs: [['Home', '#/dashboard'], ['Products']], action: can('catalog') ? `<a class="btn btn-primary" href="#/products/new">+ New product</a>` : '',
   note: 'Mark a product unavailable when it cannot be sourced for now. It stays in the system and disappears from the public catalog.',
-  cols: [{ k: 'code', label: 'Code' }, { k: 'name', label: 'Product' }, { k: 'category', label: 'Category' }, { label: 'Sourcing', render: (r) => `<span class="badge ${r.sourcing === 'In-house' ? 'badge-teal' : 'badge-gray'}">${r.sourcing}</span>` },
+  cols: [{ k: 'code', label: 'Code' }, { label: 'Product', render: (r) => `<div class="flex items-center gap-3">${thumb(r)}<span>${esc(r.name)}</span></div>` }, { k: 'category', label: 'Category' }, { label: 'Sourcing', render: (r) => `<span class="badge ${r.sourcing === 'In-house' ? 'badge-teal' : 'badge-gray'}">${r.sourcing}</span>` },
     { k: 'uom', label: 'UoM' }, { label: 'Sizes', render: (r) => `<span class="text-muted">${esc((r.sizes || []).join(' · '))}</span>` },
     { label: 'Availability', render: (r) => badge(r.active ? 'Available' : 'Unavailable') },
     ...(can('catalog') ? [{ label: '', render: (r) => `<div class="flex gap-1">${editLink('#/products/' + r.id + '/edit')}${actionButton(r.active ? 'Mark unavailable' : 'Mark available', async () => { await api.updateProduct(r.id, productPayload({ name: r.name, category: r.category, sourcing_type: r.sourcingType, uom: r.uom, specifications: r.spec || '', is_active: !r.active })); return `${r.name} is now ${r.active ? 'unavailable' : 'available'}.` }, 'btn-ghost !py-1')}</div>` }] : [])],
@@ -38,6 +52,9 @@ const productFields = (p = {}, categories = []) => [
   { name: 'uom', label: 'Unit of measure', placeholder: 'pc', value: p.uom },
   { name: 'sizes', label: 'Sizes / variants', placeholder: 'S, M, L, XL', value: (p.sizes || []).join(', '), hint: 'Comma separated. Removing a size switches it off but keeps old orders. Leave blank for "One size".' },
   { name: 'specifications', label: 'Specification', type: 'textarea', span: 2, value: p.spec },
+  { name: 'image', label: p.image ? 'Replace photo' : 'Product photo', type: 'file', accept: 'image/png,image/jpeg,image/webp', span: 2,
+    hint: (p.image ? `<span class="mb-2 flex items-center gap-3">${thumb(p, 'h-24 w-24')}<span>Current photo. Choose a new file to replace it.</span></span>` : '') + `JPG, PNG or WEBP, up to ${MAX_PHOTO_MB} MB. Shown in the catalog and on the public website.` },
+  ...(p.image ? [{ name: 'remove_image', label: 'Remove photo', type: 'checkbox', checkLabel: 'Remove the current photo (ignored if you choose a new one)', span: 2 }] : []),
   ...(p.id ? [{ name: 'is_active', label: 'Availability', type: 'checkbox', checkLabel: 'Available (uncheck if it cannot be sourced or made right now)', value: p.active, span: 2 }] : []),
 ]
 
@@ -45,7 +62,11 @@ const productForm = asyncRoute('categories', async () => {
   const categories = [...new Set(unwrap(await api.products()).map((p) => p.category))]
   return form({
     title: 'New product', crumbs: [['Home', '#/dashboard'], ['Products', '#/products'], ['New']], back: '/products', submit: 'Create product',
-    onSubmit: async (d) => { await api.createProduct(productPayload(d)); return `Product "${d.name}" created.` },
+    onSubmit: async (d) => {
+      const created = unwrapOne(await api.createProduct(productPayload(d)))
+      try { await savePhoto(created.id, d) } catch (e) { location.hash = `/products/${created.id}/edit`; throw Object.assign(e, { message: `Product created, but the photo was not saved: ${e.message}` }) }
+      return `Product "${d.name}" created.`
+    },
     fields: productFields({}, categories),
   })
 })
@@ -58,7 +79,7 @@ const productEdit = asyncRoute('product', async ({ id }) => {
   return form({
     title: `Edit ${esc(p.name)}`, crumbs: [['Home', '#/dashboard'], ['Products', '#/products'], [p.code]], back: '/products', submit: 'Save changes',
     actions: badge(p.active ? 'Available' : 'Unavailable'),
-    onSubmit: async (d) => { await api.updateProduct(p.id, { ...productPayload(d), is_active: !!d.is_active }); return `${d.name} updated.` },
+    onSubmit: async (d) => { await api.updateProduct(p.id, { ...productPayload(d), is_active: !!d.is_active }); await savePhoto(p.id, d); return `${d.name} updated.` },
     fields: productFields(p, categories),
   })
 })

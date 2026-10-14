@@ -12,6 +12,8 @@ use App\Support\ApiPresent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CatalogController extends Controller
 {
@@ -177,6 +179,42 @@ class CatalogController extends Controller
         });
 
         return response()->json(['data' => ApiPresent::product($product->fresh(['category', 'variants']))]);
+    }
+
+    // Product photo (multipart "image" field). Replaces the old photo if there was one.
+    public function uploadProductImage(Request $request, Product $product): JsonResponse
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120', // KB
+        ]);
+
+        $old = $product->image_path;
+        $product->update(['image_path' => $request->file('image')->store('products', 'local')]);
+        if ($old && $old !== $product->image_path) {
+            Storage::disk('local')->delete($old);
+        }
+
+        return response()->json(['data' => ApiPresent::product($product->fresh(['category', 'variants']))]);
+    }
+
+    public function deleteProductImage(Product $product): JsonResponse
+    {
+        if ($product->image_path) {
+            Storage::disk('local')->delete($product->image_path);
+            $product->update(['image_path' => null]);
+        }
+
+        return response()->json(['data' => ApiPresent::product($product->fresh(['category', 'variants']))]);
+    }
+
+    // Public: streams the photo so <img> tags work without a token or a storage symlink.
+    public function productImage(Product $product): StreamedResponse
+    {
+        abort_unless($product->image_path && Storage::disk('local')->exists($product->image_path), 404);
+
+        return Storage::disk('local')->response($product->image_path, null, [
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
     }
 
     public function updateSupplier(Request $request, Supplier $supplier): JsonResponse

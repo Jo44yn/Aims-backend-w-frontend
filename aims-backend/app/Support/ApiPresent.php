@@ -119,6 +119,8 @@ class ApiPresent
             'uom' => $p->uom,
             'sizes' => $variants->where('is_active', true)->pluck('size')->filter()->values()->all(),
             'spec' => $p->specifications,
+            // ?v= busts the browser cache when the photo is replaced.
+            'image' => $p->image_path ? url("/api/v1/public/products/{$p->id}/image").'?v='.$p->updated_at?->timestamp : null,
             'active' => (bool) $p->is_active,
             'sourcingType' => $p->sourcing_type,
             'variants' => $variants->map(fn ($v) => [

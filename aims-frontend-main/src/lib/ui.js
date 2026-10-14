@@ -135,6 +135,7 @@ const field = (f) => {
     ctl = `<select class="input" ${common}><option value="">Select…</option>${opts.map((o) => `<option value="${esc(o.value)}" ${String(o.value) === String(f.value ?? '') ? 'selected' : ''}>${o.label}</option>`).join('')}</select>`
   } else if (f.type === 'textarea') ctl = `<textarea class="input" rows="3" ${common}>${esc(f.value)}</textarea>`
   else if (f.type === 'checkbox') ctl = `<label class="flex items-center gap-2"><input type="checkbox" id="${id}" name="${f.name}" value="1" ${f.value ? 'checked' : ''}> ${f.checkLabel || ''}</label>`
+  else if (f.type === 'file') ctl = `<input class="input" type="file" ${f.accept ? `accept="${esc(f.accept)}"` : ''} ${common}>`
   else ctl = `<input class="input ${f.readonly ? 'bg-paper' : ''}" type="${f.type || 'text'}" value="${esc(f.value)}" placeholder="${f.placeholder || ''}" ${f.type === 'number' ? `min="${f.min ?? 0}" step="any"` : ''} ${common}>`
   return `<div class="${f.span === 2 ? 'md:col-span-2' : ''}">
   <label class="label" for="${id}">${f.label}${f.required ? ' <span class="text-danger">*</span>' : ''}</label>${ctl}
