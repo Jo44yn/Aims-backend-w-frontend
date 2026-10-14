@@ -21,6 +21,7 @@ Route::prefix('v1')->group(function () use ($staff) {
     Route::post('/auth/verify-mfa', [AuthController::class, 'verifyMfa'])->middleware('throttle:10,1');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::get('/public/products', [CatalogController::class, 'publicProducts']);
+    Route::get('/public/products/{product}/image', [CatalogController::class, 'productImage']);
     Route::post('/public/inquiries', [InquiryController::class, 'storePublic'])->middleware('throttle:10,1');
 
     // ── Signed in (any role) ───────────────────────────────────────────────
@@ -69,6 +70,8 @@ Route::prefix('v1')->group(function () use ($staff) {
             Route::middleware('role:admin|gm|purchasing')->group(function () {
                 Route::post('/products', [CatalogController::class, 'storeProduct']);
                 Route::put('/products/{product}', [CatalogController::class, 'updateProduct']);
+                Route::post('/products/{product}/image', [CatalogController::class, 'uploadProductImage']);
+                Route::delete('/products/{product}/image', [CatalogController::class, 'deleteProductImage']);
                 Route::post('/suppliers', [CatalogController::class, 'storeSupplier']);
                 Route::put('/suppliers/{supplier}', [CatalogController::class, 'updateSupplier']);
                 Route::post('/suppliers/{supplier}/approve', [CatalogController::class, 'approveSupplier']);

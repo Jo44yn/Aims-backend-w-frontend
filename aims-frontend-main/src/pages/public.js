@@ -12,7 +12,9 @@ const LINES = [
 ]
 const card = (p) => `
 <a href="#/products/${p.slug}" class="card block p-4 transition-shadow hover:shadow-md">
-  <div class="mb-3 grid h-32 place-items-center rounded-md bg-paper font-head text-3xl text-primary/40">${p.category}</div>
+  ${p.image
+    ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" class="mb-3 h-32 w-full rounded-md bg-paper object-cover">`
+    : `<div class="mb-3 grid h-32 place-items-center rounded-md bg-paper font-head text-3xl text-primary/40">${esc(p.category)}</div>`}
   <p class="text-xs font-semibold uppercase text-muted">${p.category}</p>
   <h3 class="font-head text-lg text-primary">${esc(p.name)}</h3>
   <p class="mt-1 text-sm text-muted">Sizes: ${esc((p.sizes || []).join(', ') || '—')}</p>
@@ -66,7 +68,9 @@ const detail = asyncRoute('product', async ({ slug }) => {
 <section class="mx-auto max-w-6xl px-4 py-10">
   <a class="link text-sm" href="#/products">← All products</a>
   <div class="mt-4 grid gap-8 md:grid-cols-2">
-    <div class="grid h-72 place-items-center rounded-lg bg-white font-head text-4xl text-primary/30 shadow-sm">${esc(p.category)}</div>
+    ${p.image
+      ? `<img src="${esc(p.image)}" alt="${esc(p.name)}" class="h-72 w-full rounded-lg bg-white object-contain shadow-sm">`
+      : `<div class="grid h-72 place-items-center rounded-lg bg-white font-head text-4xl text-primary/30 shadow-sm">${esc(p.category)}</div>`}
     <div>
       <p class="text-xs font-semibold uppercase text-muted">${esc(p.category)} · ${esc(p.code)}</p>
       <h1 class="font-head text-3xl text-primary">${esc(p.name)}</h1>

@@ -14,6 +14,7 @@ class Product extends Model
         'slug',
         'name',
         'specifications',
+        'image_path',
         'uom',
         'sourcing_type',
         'is_active',
