@@ -31,6 +31,8 @@ class User extends Authenticatable
         'avatar',
         'is_active',
         'last_login_at',
+        'mfa_code',
+        'mfa_expires_at',
     ];
 
     /**

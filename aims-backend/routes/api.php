@@ -18,6 +18,7 @@ $staff = 'admin|gm|bidding|purchasing|warehouse|production|qa|accounting';
 Route::prefix('v1')->group(function () use ($staff) {
     // ── Public ─────────────────────────────────────────────────────────────
     Route::post('/auth/login', [AuthController::class, 'login'])->name('login')->middleware('throttle:10,1');
+    Route::post('/auth/verify-mfa', [AuthController::class, 'verifyMfa'])->middleware('throttle:10,1');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::get('/public/products', [CatalogController::class, 'publicProducts']);
     Route::get('/public/products/{product}/image', [CatalogController::class, 'productImage']);

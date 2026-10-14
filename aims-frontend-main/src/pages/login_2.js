@@ -1,23 +1,33 @@
 // P06 – Sign in / Sign up. Talks to the Laravel API through lib/api.js (no pre-filled credentials).
-import { login, register, homeFor } from '../lib/api.js'
+import { login, register, verifyMfa, homeFor } from '../lib/api.js'
 import { logo } from '../lib/brand.js'
 
 // Alpine expressions in the markup below call these.
-window.aimsAuth = { login, register, homeFor }
+window.aimsAuth = { login, register, verifyMfa, homeFor }
 
 export const loginPage = () => `
-<div class="grid min-h-screen place-items-center p-4" x-data="{mode: location.hash === '#signup' ? 'signup' : 'login', err:'', ok:'', sent:false, loading:false}">
+<div class="grid min-h-screen place-items-center p-4" x-data="{mode: location.hash === '#signup' ? 'signup' : 'login', err:'', ok:'', sent:false, loading:false, mfaEmail:'', devCode:''}">
   <div class="w-full max-w-md">
     <a href="index.html" class="mb-6 flex items-center justify-center gap-3">${logo('h-14 w-14')}<span class="font-head text-2xl text-primary">AIMS</span></a>
     <div class="card p-6">
 
+      <!-- Sign In Form -->
       <form x-show="mode==='login'" novalidate
         @submit.prevent="
           const f = Object.fromEntries(new FormData($el));
           if (!f.email || !f.password) { err = 'Enter your email and password.'; return }
           err = ''; ok = ''; loading = true;
           aimsAuth.login(f.email, f.password)
-            .then((d) => { location.href = aimsAuth.homeFor(d.user) })
+            .then((d) => {
+              loading = false;
+              if (d.mfa_required) {
+                mfaEmail = d.email;
+                devCode = d.dev_code || '';
+                mode = 'mfa';
+              } else {
+                location.href = aimsAuth.homeFor(d.user)
+              }
+            })
             .catch((e) => { loading = false; err = e.message })">
         <h1 class="font-head text-2xl text-primary">Sign in</h1>
         <p class="mt-1 text-sm text-muted">Use your AIMS account credentials to sign in.</p>
@@ -32,6 +42,34 @@ export const loginPage = () => `
         <p class="mt-3 text-center text-sm text-muted">New client? <button type="button" class="link" @click="mode='signup'; err=''; ok=''">Create an account</button></p>
       </form>
 
+      <!-- MFA Verification Form -->
+      <form x-show="mode==='mfa'" x-cloak novalidate
+        @submit.prevent="
+          const f = Object.fromEntries(new FormData($el));
+          if (!f.code || f.code.length !== 6) { err = 'Enter the 6-digit code.'; return }
+          err = ''; loading = true;
+          aimsAuth.verifyMfa(mfaEmail, f.code)
+            .then((d) => { location.href = aimsAuth.homeFor(d.user) })
+            .catch((e) => { loading = false; err = e.message })">
+        <h1 class="font-head text-2xl text-primary">Two-Factor Verification</h1>
+        <p class="mt-1 text-sm text-muted">Enter the 6-digit code sent to your account.</p>
+        
+        <!-- Dev Mode Code Banner -->
+        <div x-show="devCode" class="mt-3 rounded-md bg-blue-50 p-3 text-xs text-blue-700">
+          <strong>Local Dev Code:</strong> <span x-text="devCode"></span>
+        </div>
+
+        <label class="label mt-4" for="mfa_code">Verification Code</label>
+        <input id="mfa_code" name="code" type="text" maxlength="6" class="input text-center text-2xl tracking-widest" placeholder="000000" autofocus>
+        
+        <p class="mt-2 text-sm text-danger" x-show="err" x-text="err"></p>
+        <button class="btn btn-primary mt-5 w-full" :disabled="loading" :class="loading && 'opacity-75'">
+          <span x-show="!loading">Verify & Sign in</span><span x-show="loading">Verifying…</span>
+        </button>
+        <button type="button" class="mt-3 w-full text-center text-sm link" @click="mode='login'; err=''">Back to sign in</button>
+      </form>
+
+      <!-- Create Account Form -->
       <form x-show="mode==='signup'" x-cloak novalidate
         @submit.prevent="
           const f = Object.fromEntries(new FormData($el));
@@ -60,6 +98,7 @@ export const loginPage = () => `
         <p class="mt-3 text-center text-sm text-muted">Already have an account? <button type="button" class="link" @click="mode='login'; err=''">Sign in</button></p>
       </form>
 
+      <!-- Password Reset Form -->
       <form x-show="mode==='forgot'" x-cloak novalidate @submit.prevent="sent = true">
         <h1 class="font-head text-2xl text-primary">Reset your password</h1>
         <p class="mt-1 text-sm text-muted">We email you a link that expires in 60 minutes.</p>
